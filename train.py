@@ -13,18 +13,29 @@ from sklearn.svm import SVC
 
 
 def load_data():
-    x_path = Path("X_train2.pkl")
-    y_path = Path("Y_train2.npy")
+    x_path = Path("Xtrain2.pkl")
+    y_path = Path("Ytrain2.npy")
 
     with x_path.open("rb") as f:
         X = pickle.load(f)
 
     y = np.load(y_path)
 
-    if hasattr(X, "values"):
+    if hasattr(X, "to_numpy"):
+        X = X.to_numpy()
+    elif hasattr(X, "values"):
         X = X.values
 
-    return np.asarray(X), np.asarray(y)
+    X = np.asarray(X)
+    y = np.asarray(y).reshape(-1)
+
+    if X.shape[0] != y.shape[0]:
+        raise ValueError(
+            "Feature matrix and target vector contain different numbers of samples: "
+            f"{X.shape[0]} != {y.shape[0]}"
+        )
+
+    return X, y
 
 
 def evaluate_models(X, y):
