@@ -6,9 +6,12 @@ single dataset and selects the model with the highest cross-validated F1 score.
 ## Data Inputs
 The training script expects two files in the project root:
 
-- `X_train2.pkl`: Pickled feature matrix. Pandas DataFrames are automatically converted to NumPy
+- `Xtrain2.pkl`: Pickled feature matrix. Pandas DataFrames are automatically converted to NumPy
   arrays when loaded.
-- `Y_train2.npy`: NumPy array containing the target labels.
+- `Ytrain2.npy`: NumPy array containing the target labels.
+
+The loader automatically flattens the target array so row- or column-vector encodings both work
+without triggering a sample-count mismatch during model evaluation.
 
 ## How Training Works
 Run the training process with:
