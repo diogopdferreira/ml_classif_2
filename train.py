@@ -3,6 +3,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 from sklearn.base import clone
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -12,30 +13,71 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 
+def _prepare_feature_matrix(frame: pd.DataFrame) -> np.ndarray:
+    """Convert the raw dataframe into a purely numeric feature matrix."""
+
+    parts = []
+
+    if "Patient_Id" in frame.columns:
+        parts.append(frame["Patient_Id"].to_numpy(dtype=float).reshape(-1, 1))
+
+    if "Exercise_Id" in frame.columns:
+        exercise_codes = frame["Exercise_Id"].astype("category").cat.codes
+        parts.append(exercise_codes.to_numpy(dtype=float).reshape(-1, 1))
+
+    if "Skeleton_Sequence" in frame.columns:
+        sequences = frame["Skeleton_Sequence"].apply(np.asarray)
+        means = np.stack(sequences.apply(lambda arr: arr.astype(float).mean(axis=0)))
+        stds = np.stack(sequences.apply(lambda arr: arr.astype(float).std(axis=0)))
+        parts.append(np.hstack([means, stds]))
+
+    if parts:
+        return np.hstack(parts)
+
+    return frame.to_numpy()
+
+
 def load_data():
     x_path = Path("Xtrain2.pkl")
     y_path = Path("Ytrain2.npy")
 
     with x_path.open("rb") as f:
-        X = pickle.load(f)
+        X_raw = pickle.load(f)
 
     y = np.load(y_path)
 
-    if hasattr(X, "to_numpy"):
-        X = X.to_numpy()
-    elif hasattr(X, "values"):
-        X = X.values
-
-    X = np.asarray(X)
     y = np.asarray(y).reshape(-1)
 
-    if X.shape[0] != y.shape[0]:
-        raise ValueError(
-            "Feature matrix and target vector contain different numbers of samples: "
-            f"{X.shape[0]} != {y.shape[0]}"
-        )
+    if hasattr(X_raw, "to_numpy"):
+        X = X_raw.to_numpy()
+    elif hasattr(X_raw, "values"):
+        X = X_raw.values
+    else:
+        X = np.asarray(X_raw)
 
-    return X, y
+    if X.shape[0] != y.shape[0]:
+        if isinstance(X_raw, pd.DataFrame) and "Patient_Id" in X_raw.columns:
+            unique_patients = np.sort(X_raw["Patient_Id"].unique())
+            if y.size == unique_patients.size:
+                patient_to_target = dict(zip(unique_patients, y))
+                y = X_raw["Patient_Id"].map(patient_to_target).to_numpy()
+                X = X_raw.to_numpy()
+            else:
+                raise ValueError(
+                    "Feature matrix rows and target vector entries do not align with patient IDs"
+                )
+        else:
+            raise ValueError(
+                "Feature matrix and target vector contain different numbers of samples: "
+                f"{X.shape[0]} != {y.shape[0]}"
+            )
+
+    if isinstance(X_raw, pd.DataFrame):
+        X_numeric = _prepare_feature_matrix(X_raw)
+    else:
+        X_numeric = np.asarray(X)
+
+    return X_numeric, y
 
 
 def evaluate_models(X, y):
