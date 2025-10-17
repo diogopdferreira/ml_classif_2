@@ -80,6 +80,12 @@ def load_data():
     return X_numeric, y
 
 
+def _params_to_string(params: dict) -> str:
+    """Create a human readable representation for a parameter dictionary."""
+
+    return ", ".join(f"{key}={value}" for key, value in params.items())
+
+
 def evaluate_models(X, y):
     candidates = []
 
@@ -143,6 +149,7 @@ def evaluate_models(X, y):
     best_model = None
     best_params = None
     best_name = None
+    evaluation_rows = []
 
     for name, estimator, param_grid in candidates:
         if isinstance(param_grid, list):
@@ -152,6 +159,8 @@ def evaluate_models(X, y):
         for params in grid:
             model = clone(estimator)
             model.set_params(**params)
+            print("-" * 80)
+            print(f"Evaluating model '{name}' with parameters: {_params_to_string(params)}")
             scores = cross_val_score(
                 model,
                 X,
@@ -161,24 +170,44 @@ def evaluate_models(X, y):
                 n_jobs=-1,
             )
             mean_score = float(np.mean(scores))
+            std_score = float(np.std(scores))
+            print(f"  Fold scores: {np.array2string(scores, precision=4)}")
+            print(f"  Mean F1 macro: {mean_score:.4f} ± {std_score:.4f}")
+            evaluation_rows.append(
+                {
+                    "model": name,
+                    "parameters": _params_to_string(params),
+                    "mean_f1_macro": mean_score,
+                    "std_f1_macro": std_score,
+                }
+            )
             if mean_score > best_score:
                 best_score = mean_score
                 best_model = clone(model)
                 best_params = params
                 best_name = name
 
-    return best_name, best_model, best_params, best_score
+    results_table = (
+        pd.DataFrame(evaluation_rows)
+        .sort_values("mean_f1_macro", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    return best_name, best_model, best_params, best_score, results_table
 
 
 def main():
     X, y = load_data()
-    best_name, best_model, best_params, best_score = evaluate_models(X, y)
+    best_name, best_model, best_params, best_score, results_table = evaluate_models(X, y)
     best_model.set_params(**best_params)
     best_model.fit(X, y)
     joblib.dump(best_model, "best_model.joblib")
     print(f"Best model: {best_name}")
     print(f"Best parameters: {best_params}")
     print(f"Best cross-validated F1 score: {best_score:.4f}")
+    if not results_table.empty:
+        print("\nSummary of cross-validated performance:")
+        print(results_table.to_string(index=False))
 
 
 if __name__ == "__main__":
